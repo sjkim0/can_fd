@@ -67,6 +67,10 @@ uint8_t new_buff_flag = 0;
 uint8_t new_fifo_0_flag = 0;
 uint8_t new_fifo_1_flag = 0;
 
+uint8_t rx_data_ok = 0;
+uint8_t rx_remote_ok = 0;
+uint8_t rx_fifo_range_ok = 0;
+
 void filterSet(void);
 void txBufferSet(void);
 void notificationSet(void);
@@ -188,7 +192,6 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 {
 	if(hfdcan->Instance == FDCAN1)
@@ -248,14 +251,15 @@ void filterSet(void)
 	sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
 	sFilterConfig.FilterID1 = 0x102;
 	sFilterConfig.FilterID2 = 0x103; // This parameter is ignored if FilterConfig is set to FDCAN_FILTER_TO_RXBUFFER.
-	// ignored fifo mode
+	// ignored buffer index in fifo mode
 	// sFilterConfig.RxBufferIndex = FDCAN_RX_BUFFER2;
+
 	HAL_FDCAN_ConfigFilter(&hfdcan1, &sFilterConfig);
 	/* Configure global filter */
 	HAL_FDCAN_ConfigGlobalFilter(&hfdcan1,
 				   FDCAN_REJECT,
 				   FDCAN_REJECT,
-				   FDCAN_REJECT_REMOTE,
+				   FDCAN_FILTER_REMOTE,
 				   FDCAN_REJECT_REMOTE);
 }
 
@@ -273,6 +277,18 @@ void txBufferSet(void)
 	TxHeader.MessageMarker = 0x00; // Ignore because FDCAN_NO_TX_EVENTS
 	HAL_FDCAN_AddMessageToTxBuffer(&hfdcan1, &TxHeader, TxData, FDCAN_TX_BUFFER0);
 
+	/* Configure Tx buffer message */
+	TxHeader.Identifier = 0x101;
+	TxHeader.IdType = FDCAN_STANDARD_ID;
+	TxHeader.TxFrameType = FDCAN_REMOTE_FRAME;
+	TxHeader.DataLength = FDCAN_DLC_BYTES_12;
+	TxHeader.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+	TxHeader.BitRateSwitch = FDCAN_BRS_ON;
+	TxHeader.FDFormat = FDCAN_FD_CAN;
+	TxHeader.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
+	TxHeader.MessageMarker = 0x00; // Ignore because FDCAN_NO_TX_EVENTS
+	HAL_FDCAN_AddMessageToTxBuffer(&hfdcan1, &TxHeader, TxData, FDCAN_TX_BUFFER1);
+
 	for(int i = 0; i < DEF_TX_DATA_LENGTH; i++)
 	{
 		TxData[i] = i;
@@ -287,7 +303,7 @@ void txBufferSet(void)
 	TxHeader.FDFormat = FDCAN_FD_CAN;
 	TxHeader.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
 	TxHeader.MessageMarker = 0x00; // Ignore because FDCAN_NO_TX_EVENTS
-	HAL_FDCAN_AddMessageToTxBuffer(&hfdcan1, &TxHeader, TxData, FDCAN_TX_BUFFER1);
+	HAL_FDCAN_AddMessageToTxBuffer(&hfdcan1, &TxHeader, TxData, FDCAN_TX_BUFFER2);
 }
 
 void notificationSet(void)
@@ -297,7 +313,6 @@ void notificationSet(void)
 
 	// ignored buffer index in fifo mode
 	HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
-//	HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO1_NEW_MESSAGE, 3);
 }
 
 void txbufferStart(void)
@@ -307,6 +322,9 @@ void txbufferStart(void)
 
 	HAL_FDCAN_EnableTxBufferRequest(&hfdcan1, FDCAN_TX_BUFFER1);
 	while(HAL_FDCAN_IsTxBufferMessagePending(&hfdcan1, FDCAN_TX_BUFFER1));
+
+	HAL_FDCAN_EnableTxBufferRequest(&hfdcan1, FDCAN_TX_BUFFER2);
+	while(HAL_FDCAN_IsTxBufferMessagePending(&hfdcan1, FDCAN_TX_BUFFER2));
 }
 
 void newMessageCheckLoop(void)
@@ -316,10 +334,20 @@ void newMessageCheckLoop(void)
 		if(HAL_FDCAN_IsRxBufferMessageAvailable(&hfdcan1, FDCAN_RX_BUFFER0) == 1)
 		{
 			HAL_FDCAN_GetRxMessage(&hfdcan1, FDCAN_RX_BUFFER0, &RxHeader, RxData_0);
+			if(RxHeader.RxFrameType == FDCAN_DATA_FRAME)
+			{
+				// data frame checker
+				rx_data_ok = 1;
+			}
 		}
 		if(HAL_FDCAN_IsRxBufferMessageAvailable(&hfdcan1, FDCAN_RX_BUFFER1) == 1)
 		{
 			HAL_FDCAN_GetRxMessage(&hfdcan1, FDCAN_RX_BUFFER1, &RxHeader, RxData_1);
+			if(RxHeader.RxFrameType == FDCAN_REMOTE_FRAME)
+			{
+				// remote frame checker
+				rx_remote_ok = 1;
+			}
 		}
 		new_buff_flag = 0;
 	}
@@ -328,6 +356,7 @@ void newMessageCheckLoop(void)
 		// cannot use fdcan_isrxbuffermessageavailable
 		HAL_FDCAN_GetRxMessage(&hfdcan1, FDCAN_RX_FIFO0, &RxHeader, RxData_FIFO_0);
 
+		rx_fifo_range_ok = 1;
 		new_fifo_0_flag = 0;
 	}
 	if(new_fifo_1_flag == 1)
