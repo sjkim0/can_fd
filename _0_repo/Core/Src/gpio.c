@@ -35,13 +35,24 @@
 /** Configure pins
      PH1-OSC_OUT (PH1)   ------> RCC_OSC_OUT
      PH0-OSC_IN (PH0)   ------> RCC_OSC_IN
+     PB13   ------> FDCAN2_TX
 */
 void MX_GPIO_Init(void)
 {
 
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+
   /* GPIO Ports Clock Enable */
-  __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin : PB13 */
+  GPIO_InitStruct.Pin = GPIO_PIN_13;
+  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  GPIO_InitStruct.Alternate = GPIO_AF9_FDCAN2;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
 }
 

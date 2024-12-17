@@ -24,7 +24,6 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "user_app.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -50,14 +49,29 @@
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
-void PeriphCommonClock_Config(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+#define DEF_TX_DATA_LENGTH (12U)
+FDCAN_FilterTypeDef sFilterConfig;
+FDCAN_TxHeaderTypeDef TxHeader;
+FDCAN_RxHeaderTypeDef RxHeader;
+uint8_t TxData[DEF_TX_DATA_LENGTH] = {0x10, 0x32, 0x54, 0x76, 0x98, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66};
+uint8_t RxData_0[12];
+uint8_t RxData_1[12];
+uint8_t RxData_FIFO_0[12];
+uint8_t new_buff_flag = 0;
+uint8_t new_fifo_0_flag = 0;
+uint8_t new_fifo_1_flag = 0;
 
+void filterSet(void);
+void txBufferSet(void);
+void notificationSet(void);
+void txbufferStart(void);
+void newMessageCheckLoop(void);
 /* USER CODE END 0 */
 
 /**
@@ -83,9 +97,6 @@ int main(void)
   /* Configure the system clock */
   SystemClock_Config();
 
-  /* Configure the peripherals common clocks */
-  PeriphCommonClock_Config();
-
   /* USER CODE BEGIN SysInit */
 
   /* USER CODE END SysInit */
@@ -93,8 +104,15 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_FDCAN1_Init();
-  MX_FDCAN2_Init();
   /* USER CODE BEGIN 2 */
+  /* USER CODE BEGIN 2 */
+  filterSet();
+  txBufferSet();
+
+  HAL_FDCAN_Start(&hfdcan1);
+
+  notificationSet();
+  txbufferStart();
 
   /* USER CODE END 2 */
 
@@ -105,6 +123,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	  newMessageCheckLoop();
   }
   /* USER CODE END 3 */
 }
@@ -124,30 +143,26 @@ void SystemClock_Config(void)
 
   /** Configure the main internal regulator output voltage
   */
-  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
-
-  while(!__HAL_PWR_GET_FLAG(PWR_FLAG_VOSRDY)) {}
-
-  __HAL_RCC_SYSCFG_CLK_ENABLE();
-  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE0);
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE3);
 
   while(!__HAL_PWR_GET_FLAG(PWR_FLAG_VOSRDY)) {}
 
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
-  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.HSIState = RCC_HSI_DIV1;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-  RCC_OscInitStruct.PLL.PLLM = 5;
-  RCC_OscInitStruct.PLL.PLLN = 192;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+  RCC_OscInitStruct.PLL.PLLM = 4;
+  RCC_OscInitStruct.PLL.PLLN = 9;
   RCC_OscInitStruct.PLL.PLLP = 2;
-  RCC_OscInitStruct.PLL.PLLQ = 2;
+  RCC_OscInitStruct.PLL.PLLQ = 3;
   RCC_OscInitStruct.PLL.PLLR = 2;
-  RCC_OscInitStruct.PLL.PLLRGE = RCC_PLL1VCIRANGE_2;
-  RCC_OscInitStruct.PLL.PLLVCOSEL = RCC_PLL1VCOWIDE;
-  RCC_OscInitStruct.PLL.PLLFRACN = 0;
+  RCC_OscInitStruct.PLL.PLLRGE = RCC_PLL1VCIRANGE_3;
+  RCC_OscInitStruct.PLL.PLLVCOSEL = RCC_PLL1VCOMEDIUM;
+  RCC_OscInitStruct.PLL.PLLFRACN = 3072;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -158,41 +173,15 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2
                               |RCC_CLOCKTYPE_D3PCLK1|RCC_CLOCKTYPE_D1PCLK1;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
   RCC_ClkInitStruct.SYSCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV2;
-  RCC_ClkInitStruct.APB3CLKDivider = RCC_APB3_DIV2;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_APB1_DIV2;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV2;
-  RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV2;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB3CLKDivider = RCC_APB3_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_APB1_DIV1;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV1;
+  RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4) != HAL_OK)
-  {
-    Error_Handler();
-  }
-}
-
-/**
-  * @brief Peripherals Common Clock Configuration
-  * @retval None
-  */
-void PeriphCommonClock_Config(void)
-{
-  RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
-
-  /** Initializes the peripherals clock
-  */
-  PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_FDCAN;
-  PeriphClkInitStruct.PLL2.PLL2M = 5;
-  PeriphClkInitStruct.PLL2.PLL2N = 32;
-  PeriphClkInitStruct.PLL2.PLL2P = 2;
-  PeriphClkInitStruct.PLL2.PLL2Q = 2;
-  PeriphClkInitStruct.PLL2.PLL2R = 2;
-  PeriphClkInitStruct.PLL2.PLL2RGE = RCC_PLL2VCIRANGE_2;
-  PeriphClkInitStruct.PLL2.PLL2VCOSEL = RCC_PLL2VCOMEDIUM;
-  PeriphClkInitStruct.PLL2.PLL2FRACN = 0;
-  PeriphClkInitStruct.FdcanClockSelection = RCC_FDCANCLKSOURCE_PLL2;
-  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
   {
     Error_Handler();
   }
@@ -200,6 +189,152 @@ void PeriphCommonClock_Config(void)
 
 /* USER CODE BEGIN 4 */
 
+void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
+{
+	if(hfdcan->Instance == FDCAN1)
+	{
+		if((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != RESET)
+		{
+			new_fifo_0_flag = 1;
+		}
+	}
+}
+
+void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs)
+{
+	if(hfdcan->Instance == FDCAN1)
+	{
+		if((RxFifo1ITs & FDCAN_IT_RX_FIFO1_NEW_MESSAGE) != RESET)
+		{
+			new_fifo_1_flag = 1;
+		}
+	}
+}
+
+void HAL_FDCAN_RxBufferNewMessageCallback(FDCAN_HandleTypeDef *hfdcan)
+{
+	if(hfdcan->Instance == FDCAN1)
+	{
+		new_buff_flag = 1;
+	}
+}
+
+void filterSet(void)
+{
+	/* Configure standard ID reception filter to Rx buffer 0 */
+	sFilterConfig.IdType = FDCAN_STANDARD_ID;
+	sFilterConfig.FilterIndex = 0;
+	sFilterConfig.FilterType = FDCAN_FILTER_DUAL;
+	sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXBUFFER;
+	sFilterConfig.FilterID1 = 0x100;
+	sFilterConfig.FilterID2 = 0; // This parameter is ignored if FilterConfig is set to FDCAN_FILTER_TO_RXBUFFER.
+	sFilterConfig.RxBufferIndex = FDCAN_RX_BUFFER0;
+	HAL_FDCAN_ConfigFilter(&hfdcan1, &sFilterConfig);
+
+	/* Configure standard ID reception filter to Rx buffer 1 */
+	sFilterConfig.IdType = FDCAN_STANDARD_ID;
+	sFilterConfig.FilterIndex = 1;
+	sFilterConfig.FilterType = FDCAN_FILTER_DUAL;
+	sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXBUFFER;
+	sFilterConfig.FilterID1 = 0x101;
+	sFilterConfig.FilterID2 = 0; // This parameter is ignored if FilterConfig is set to FDCAN_FILTER_TO_RXBUFFER.
+	sFilterConfig.RxBufferIndex = FDCAN_RX_BUFFER1;
+	HAL_FDCAN_ConfigFilter(&hfdcan1, &sFilterConfig);
+
+	/* Configure standard ID reception filter to Rx buffer 1 */
+	sFilterConfig.IdType = FDCAN_STANDARD_ID;
+	sFilterConfig.FilterIndex = 2;
+	sFilterConfig.FilterType = FDCAN_FILTER_DUAL;
+	sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
+	sFilterConfig.FilterID1 = 0x102;
+	sFilterConfig.FilterID2 = 0x103; // This parameter is ignored if FilterConfig is set to FDCAN_FILTER_TO_RXBUFFER.
+	// ignored fifo mode
+	// sFilterConfig.RxBufferIndex = FDCAN_RX_BUFFER2;
+	HAL_FDCAN_ConfigFilter(&hfdcan1, &sFilterConfig);
+	/* Configure global filter */
+	HAL_FDCAN_ConfigGlobalFilter(&hfdcan1,
+				   FDCAN_REJECT,
+				   FDCAN_REJECT,
+				   FDCAN_REJECT_REMOTE,
+				   FDCAN_REJECT_REMOTE);
+}
+
+void txBufferSet(void)
+{
+	/* Configure Tx buffer message */
+	TxHeader.Identifier = 0x100;
+	TxHeader.IdType = FDCAN_STANDARD_ID;
+	TxHeader.TxFrameType = FDCAN_DATA_FRAME;
+	TxHeader.DataLength = FDCAN_DLC_BYTES_12;
+	TxHeader.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+	TxHeader.BitRateSwitch = FDCAN_BRS_ON;
+	TxHeader.FDFormat = FDCAN_FD_CAN;
+	TxHeader.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
+	TxHeader.MessageMarker = 0x00; // Ignore because FDCAN_NO_TX_EVENTS
+	HAL_FDCAN_AddMessageToTxBuffer(&hfdcan1, &TxHeader, TxData, FDCAN_TX_BUFFER0);
+
+	for(int i = 0; i < DEF_TX_DATA_LENGTH; i++)
+	{
+		TxData[i] = i;
+	}
+	/* Configure Tx buffer message */
+	TxHeader.Identifier = 0x103;
+	TxHeader.IdType = FDCAN_STANDARD_ID;
+	TxHeader.TxFrameType = FDCAN_DATA_FRAME;
+	TxHeader.DataLength = FDCAN_DLC_BYTES_12;
+	TxHeader.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+	TxHeader.BitRateSwitch = FDCAN_BRS_ON;
+	TxHeader.FDFormat = FDCAN_FD_CAN;
+	TxHeader.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
+	TxHeader.MessageMarker = 0x00; // Ignore because FDCAN_NO_TX_EVENTS
+	HAL_FDCAN_AddMessageToTxBuffer(&hfdcan1, &TxHeader, TxData, FDCAN_TX_BUFFER1);
+}
+
+void notificationSet(void)
+{
+	HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_BUFFER_NEW_MESSAGE, 0);
+	HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_BUFFER_NEW_MESSAGE, 1);
+
+	// ignored buffer index in fifo mode
+	HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
+//	HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO1_NEW_MESSAGE, 3);
+}
+
+void txbufferStart(void)
+{
+	HAL_FDCAN_EnableTxBufferRequest(&hfdcan1, FDCAN_TX_BUFFER0);
+	while(HAL_FDCAN_IsTxBufferMessagePending(&hfdcan1, FDCAN_TX_BUFFER0));
+
+	HAL_FDCAN_EnableTxBufferRequest(&hfdcan1, FDCAN_TX_BUFFER1);
+	while(HAL_FDCAN_IsTxBufferMessagePending(&hfdcan1, FDCAN_TX_BUFFER1));
+}
+
+void newMessageCheckLoop(void)
+{
+	if(new_buff_flag == 1)
+	{
+		if(HAL_FDCAN_IsRxBufferMessageAvailable(&hfdcan1, FDCAN_RX_BUFFER0) == 1)
+		{
+			HAL_FDCAN_GetRxMessage(&hfdcan1, FDCAN_RX_BUFFER0, &RxHeader, RxData_0);
+		}
+		if(HAL_FDCAN_IsRxBufferMessageAvailable(&hfdcan1, FDCAN_RX_BUFFER1) == 1)
+		{
+			HAL_FDCAN_GetRxMessage(&hfdcan1, FDCAN_RX_BUFFER1, &RxHeader, RxData_1);
+		}
+		new_buff_flag = 0;
+	}
+	if(new_fifo_0_flag == 1)
+	{
+		// cannot use fdcan_isrxbuffermessageavailable
+		HAL_FDCAN_GetRxMessage(&hfdcan1, FDCAN_RX_FIFO0, &RxHeader, RxData_FIFO_0);
+
+		new_fifo_0_flag = 0;
+	}
+	if(new_fifo_1_flag == 1)
+	{
+		new_fifo_1_flag = 0;
+	}
+}
 /* USER CODE END 4 */
 
 /**
