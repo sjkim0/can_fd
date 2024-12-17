@@ -61,7 +61,7 @@ void MX_FDCAN1_Init(void)
   hfdcan1.Init.RxBuffersNbr = 2;
   hfdcan1.Init.RxBufferSize = FDCAN_DATA_BYTES_12;
   hfdcan1.Init.TxEventsNbr = 0;
-  hfdcan1.Init.TxBuffersNbr = 3;
+  hfdcan1.Init.TxBuffersNbr = 4;
   hfdcan1.Init.TxFifoQueueElmtsNbr = 0;
   hfdcan1.Init.TxFifoQueueMode = FDCAN_TX_FIFO_OPERATION;
   hfdcan1.Init.TxElmtSize = FDCAN_DATA_BYTES_12;
