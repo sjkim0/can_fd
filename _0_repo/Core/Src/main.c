@@ -59,7 +59,7 @@ void SystemClock_Config(void);
 FDCAN_FilterTypeDef sFilterConfig;
 FDCAN_TxHeaderTypeDef TxHeader;
 FDCAN_RxHeaderTypeDef RxHeader;
-uint8_t TxData[DEF_TX_DATA_LENGTH] = {0x10, 0x32, 0x54, 0x76, 0x98, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66};
+uint8_t TxData[DEF_TX_DATA_LENGTH] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C};
 uint8_t RxData_0[12];
 uint8_t RxData_1[12];
 uint8_t RxData_FIFO_0[12];
@@ -129,6 +129,27 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 	  newMessageCheckLoop();
+	  if(rx_data_ok == 1
+	  			  && rx_remote_ok == 1
+	  			  && rx_fifo_range_ok == 1)
+	  {
+		  rx_data_ok = 0;
+		  rx_remote_ok = 0;
+		  rx_fifo_range_ok = 0;
+		  txbufferStart();
+	  }
+	  // mask error
+//	  if(rx_data_ok == 1
+//			  && rx_remote_ok == 1
+//			  && rx_fifo_range_ok == 1
+//			  && rx_fifo_mask_ok == 1)
+//	  {
+//		  rx_data_ok = 0;
+//		  rx_remote_ok = 0;
+//		  rx_fifo_range_ok = 0;
+//		  rx_fifo_mask_ok = 0;
+//		  txbufferStart();
+//	  }
   }
   /* USER CODE END 3 */
 }
@@ -349,9 +370,9 @@ void txbufferStart(void)
 
 	HAL_FDCAN_EnableTxBufferRequest(&hfdcan1, FDCAN_TX_BUFFER2);
 	while(HAL_FDCAN_IsTxBufferMessagePending(&hfdcan1, FDCAN_TX_BUFFER2));
-
-	HAL_FDCAN_EnableTxBufferRequest(&hfdcan1, FDCAN_TX_BUFFER3);
-	while(HAL_FDCAN_IsTxBufferMessagePending(&hfdcan1, FDCAN_TX_BUFFER2));
+//
+//	HAL_FDCAN_EnableTxBufferRequest(&hfdcan1, FDCAN_TX_BUFFER3);
+//	while(HAL_FDCAN_IsTxBufferMessagePending(&hfdcan1, FDCAN_TX_BUFFER2));
 }
 
 void newMessageCheckLoop(void)
